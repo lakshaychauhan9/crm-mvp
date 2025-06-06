@@ -1,26 +1,52 @@
 @import "tailwindcss";
+@config "../../tailwind.config.js";
+@tailwind utilities;
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: 0 0% 100%; /* White */
+  --foreground: 222.2 47.4% 11.2%; /* Dark gray */
+  --card: 0 0% 100%; /* White */
+  --card-foreground: 222.2 47.4% 11.2%; /* Dark gray */
+  --popover: 0 0% 100%; /* White */
+  --popover-foreground: 222.2 47.4% 11.2%; /* Dark gray */
+  --primary: 222.2 47.4% 11.2%; /* Dark gray */
+  --primary-foreground: 210 40% 98%; /* Near white */
+  --secondary: 210 40% 96.1%; /* Light gray */
+  --secondary-foreground: 222.2 47.4% 11.2%; /* Dark gray */
+  --muted: 210 40% 96.1%; /* Light gray */
+  --muted-foreground: 215.4 16.3% 46.9%; /* Medium gray */
+  --accent: 210 40% 96.1%; /* Light gray */
+  --accent-foreground: 222.2 47.4% 11.2%; /* Dark gray */
+  --destructive: 0 84.2% 60.2%; /* Red */
+  --destructive-foreground: 210 40% 98%; /* Near white */
+  --border: 214.3 31.8% 91.4%; /* Light gray */
+  --input: 214.3 31.8% 91.4%; /* Light gray */
+  --ring: 222.2 47.4% 11.2%; /* Dark gray */
+  --radius: 0.5rem;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+.dark {
+  --background: 222.2 47.4% 11.2%; /* Dark gray */
+  --foreground: 210 40% 98%; /* Near white */
+  --card: 222.2 47.4% 11.2%; /* Dark gray */
+  --card-foreground: 210 40% 98%; /* Near white */
+  --popover: 222.2 47.4% 11.2%; /* Dark gray */
+  --popover-foreground: 210 40% 98%; /* Near white */
+  --primary: 210 40% 98%; /* Near white */
+  --primary-foreground: 222.2 47.4% 11.2%; /* Dark gray */
+  --secondary: 217.2 32.6% 17.5%; /* Darker gray */
+  --secondary-foreground: 210 40% 98%; /* Near white */
+  --muted: 217.2 32.6% 17.5%; /* Darker gray */
+  --muted-foreground: 215 20.2% 65.1%; /* Light gray */
+  --accent: 217.2 32.6% 17.5%; /* Darker gray */
+  --accent-foreground: 210 40% 98%; /* Near white */
+  --destructive: 0 62.8% 30.6%; /* Dark red */
+  --destructive-foreground: 210 40% 98%; /* Near white */
+  --border: 217.2 32.6% 17.5%; /* Darker gray */
+  --input: 217.2 32.6% 17.5%; /* Darker gray */
+  --ring: 212.7 26.8% 83.9%; /* Light gray */
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  @apply bg-background text-foreground;
 }

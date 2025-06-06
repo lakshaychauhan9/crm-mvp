@@ -1,15 +1,17 @@
-import { supabase } from "@/lib/supabase";
-import { NextResponse } from "next/server";
+import { getSupabaseClient } from "@/lib/supabase";
+import { NextResponse, NextRequest } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { v4 as uuidv4 } from "uuid";
 import bcrypt from "bcrypt";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
     const { userId } = await auth();
+    console.log("Clients GET User ID:", userId);
     if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+    const supabase = await getSupabaseClient(req);
     const { data, error } = await supabase
       .from("clients")
       .select("id, user_id, encrypted_data, salt, iv, created_at, updated_at")
@@ -21,36 +23,46 @@ export async function GET() {
         { status: 500 }
       );
     }
+    console.log("Fetched clients:", data.length);
     return NextResponse.json({ data });
-  } catch (err) {
-    console.error("Unexpected GET error:", err);
+  } catch (error) {
+    console.error("Clients GET error:", error);
     return NextResponse.json({ error: "Server error" }, { status: 500 });
   }
 }
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
   try {
     const { userId } = await auth();
+    console.log("Clients POST User ID:", userId);
     if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
     const { encrypted_data, salt, iv, userKey } = await req.json();
     if (!encrypted_data || !salt || !iv || !userKey) {
+      console.log("POST missing fields:", {
+        encrypted_data,
+        salt,
+        iv,
+        userKey,
+      });
       return NextResponse.json({ error: "Missing fields" }, { status: 400 });
     }
-    // Verify user key
+    const supabase = await getSupabaseClient(req);
     const { data: userKeyData, error: userKeyError } = await supabase
       .from("user_keys")
       .select("key_hash")
       .eq("user_id", userId)
       .single();
     if (userKeyError || !userKeyData) {
+      console.error("User key query error:", userKeyError);
       return NextResponse.json(
         { error: "User key not found" },
         { status: 400 }
       );
     }
     if (!(await bcrypt.compare(userKey, userKeyData.key_hash))) {
+      console.log("Invalid user key for user:", userId);
       return NextResponse.json({ error: "Invalid user key" }, { status: 400 });
     }
     const clientData = {
@@ -62,7 +74,7 @@ export async function POST(req: Request) {
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
-    console.log("Inserting client:", clientData);
+    console.log("Inserting client:", { id: clientData.id, user_id: userId });
     const { error, data: insertedData } = await supabase
       .from("clients")
       .insert(clientData)
@@ -75,36 +87,47 @@ export async function POST(req: Request) {
         { status: 500 }
       );
     }
+    console.log("Inserted client ID:", insertedData.id);
     return NextResponse.json({ success: true, id: insertedData.id });
-  } catch (err) {
-    console.error("Unexpected error:", err);
+  } catch (error) {
+    console.error("Clients POST error:", error);
     return NextResponse.json({ error: "Server error" }, { status: 500 });
   }
 }
 
-export async function PUT(req: Request) {
+export async function PUT(req: NextRequest) {
   try {
     const { userId } = await auth();
+    console.log("Clients PUT User ID:", userId);
     if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
     const { id, encrypted_data, salt, iv, userKey } = await req.json();
     if (!id || !encrypted_data || !salt || !iv || !userKey) {
+      console.log("PUT missing fields:", {
+        id,
+        encrypted_data,
+        salt,
+        iv,
+        userKey,
+      });
       return NextResponse.json({ error: "Missing fields" }, { status: 400 });
     }
-    // Verify user key
+    const supabase = await getSupabaseClient(req);
     const { data: userKeyData, error: userKeyError } = await supabase
       .from("user_keys")
       .select("key_hash")
       .eq("user_id", userId)
       .single();
     if (userKeyError || !userKeyData) {
+      console.error("User key query error:", userKeyError);
       return NextResponse.json(
         { error: "User key not found" },
         { status: 400 }
       );
     }
     if (!(await bcrypt.compare(userKey, userKeyData.key_hash))) {
+      console.log("Invalid user key for user:", userId);
       return NextResponse.json({ error: "Invalid user key" }, { status: 400 });
     }
     const updates = {
@@ -113,7 +136,7 @@ export async function PUT(req: Request) {
       iv,
       updated_at: new Date().toISOString(),
     };
-    console.log("Updating client:", { id, updates });
+    console.log("Updating client:", { id, user_id: userId });
     const { error } = await supabase
       .from("clients")
       .update(updates)
@@ -126,9 +149,44 @@ export async function PUT(req: Request) {
         { status: 500 }
       );
     }
+    console.log("Updated client ID:", id);
     return NextResponse.json({ success: true });
-  } catch (err) {
-    console.error("Unexpected error:", err);
+  } catch (error) {
+    console.error("Clients PUT error:", error);
+    return NextResponse.json({ error: "Server error" }, { status: 500 });
+  }
+}
+
+export async function DELETE(req: NextRequest) {
+  try {
+    const { userId } = await auth();
+    console.log("Clients DELETE User ID:", userId);
+    if (!userId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    const { id } = await req.json();
+    if (!id) {
+      console.log("DELETE missing ID");
+      return NextResponse.json({ error: "ID required" }, { status: 400 });
+    }
+    const supabase = await getSupabaseClient(req);
+    console.log("Deleting client:", { id, user_id: userId });
+    const { error } = await supabase
+      .from("clients")
+      .delete()
+      .eq("id", id)
+      .eq("user_id", userId);
+    if (error) {
+      console.error("Supabase DELETE error:", error);
+      return NextResponse.json(
+        { error: "Delete failed", details: error.message },
+        { status: 500 }
+      );
+    }
+    console.log("Deleted client ID:", id);
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error("Clients DELETE error:", error);
     return NextResponse.json({ error: "Server error" }, { status: 500 });
   }
 }

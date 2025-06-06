@@ -1,21 +1,26 @@
-import type { Metadata } from "next";
-import { ClerkProvider } from "@clerk/nextjs";
 import "./globals.css";
+import { Inter } from "next/font/google";
+import { ClerkProvider } from "@clerk/nextjs";
+import { KeyProvider } from "@/components/KeyContext";
 
-export const metadata: Metadata = {
+const inter = Inter({ subsets: ["latin"] });
+
+export const metadata = {
   title: "Client Tracker",
-  description: "A web app for tracking leads and managing outreach strategies.",
+  description: "Secure CRM for small businesses and freelancers",
 };
 
 export default function RootLayout({
   children,
-}: Readonly<{
+}: {
   children: React.ReactNode;
-}>) {
+}) {
   return (
     <ClerkProvider>
       <html lang="en">
-        <body>{children}</body>
+        <body className={inter.className}>
+          <KeyProvider>{children}</KeyProvider>
+        </body>
       </html>
     </ClerkProvider>
   );

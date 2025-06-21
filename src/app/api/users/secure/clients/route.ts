@@ -1,31 +1,43 @@
-/**
- * API route for pitch decks in Client Tracker (Server Component).
- * Handles GET, POST, PUT, DELETE requests for pitch deck CRUD operations.
- * Why: Manages encrypted pitch deck data with AES-256-CBC.
- * How: Uses Clerk for auth, Supabase for storage, and crypto.ts for encryption.
- * Changes:
- * - Aligned with api/clients/route.ts structure.
- * - Used getSupabaseClient, userKey in body with bcrypt validation.
- * - GET returns raw data (decryption in store.ts).
- * - POST/PUT expect encrypted_data, iv, salt, userKey.
- * - Removed X-User-Key header.
- */
-import { NextResponse, NextRequest } from "next/server";
 import { getSupabaseClient } from "@/lib/supabase";
+import { NextResponse, NextRequest } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { v4 as uuidv4 } from "uuid";
 import bcrypt from "bcrypt";
 
+// API route for client CRUD operations
+// Validates userKey via bcrypt and supports legacy data (nullable salt)
 export async function GET(req: NextRequest) {
   try {
     const { userId } = await auth();
-    console.log("PitchDecks GET User ID:", userId);
+    console.log("Clients GET User ID:", userId);
     if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+    const userKey = req.headers.get("X-User-Key");
+    if (!userKey) {
+      return NextResponse.json({ error: "User key required" }, { status: 400 });
+    }
     const supabase = await getSupabaseClient(req);
+    // Verify userKey
+    const { data: userKeyData, error: userKeyError } = await supabase
+      .from("user_keys")
+      .select("key_hash")
+      .eq("user_id", userId)
+      .single();
+    if (userKeyError || !userKeyData) {
+      console.error("User key query error:", userKeyError);
+      return NextResponse.json(
+        { error: "User key not found" },
+        { status: 400 }
+      );
+    }
+    if (!(await bcrypt.compare(userKey, userKeyData.key_hash))) {
+      console.log("Invalid user key for user:", userId);
+      return NextResponse.json({ error: "Invalid user key" }, { status: 400 });
+    }
+    // Fetch clients
     const { data, error } = await supabase
-      .from("pitch_decks")
+      .from("clients")
       .select("id, user_id, encrypted_data, salt, iv, created_at, updated_at")
       .eq("user_id", userId);
     if (error) {
@@ -35,21 +47,15 @@ export async function GET(req: NextRequest) {
         { status: 500 }
       );
     }
-    const validData = data.filter((deck) => {
-      if (!deck.encrypted_data || !deck.iv || !deck.salt) {
-        console.error("Invalid pitch deck data:", deck.id, {
-          hasEncryptedData: !!deck.encrypted_data,
-          hasIv: !!deck.iv,
-          hasSalt: !!deck.salt,
-        });
-        return false;
-      }
-      return true;
-    });
-    console.log("Fetched pitch decks:", validData.length);
+    // Filter valid data (allow nullable salt for legacy)
+    const validData = data.filter(
+      (client) =>
+        client.id && client.user_id && client.encrypted_data && client.iv
+    );
+    console.log("Fetched clients:", validData.length);
     return NextResponse.json({ data: validData });
   } catch (error) {
-    console.error("PitchDecks GET error:", error);
+    console.error("Clients GET error:", error);
     return NextResponse.json({ error: "Server error" }, { status: 500 });
   }
 }
@@ -57,12 +63,12 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const { userId } = await auth();
-    console.log("PitchDecks POST User ID:", userId);
+    console.log("Clients POST User ID:", userId);
     if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
     const { encrypted_data, salt, iv, userKey } = await req.json();
-    if (!encrypted_data || !salt || !iv || !userKey) {
+    if (!encrypted_data || !iv || !userKey) {
       console.log("POST missing fields:", {
         encrypted_data,
         salt,
@@ -88,19 +94,19 @@ export async function POST(req: NextRequest) {
       console.log("Invalid user key for user:", userId);
       return NextResponse.json({ error: "Invalid user key" }, { status: 400 });
     }
-    const deckData = {
+    const clientData = {
       id: uuidv4(),
       user_id: userId,
       encrypted_data,
-      salt,
+      salt: salt || "", // Support legacy data
       iv,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
-    console.log("Inserting pitch deck:", { id: deckData.id, user_id: userId });
+    console.log("Inserting client:", { id: clientData.id, user_id: userId });
     const { error, data: insertedData } = await supabase
-      .from("pitch_decks")
-      .insert(deckData)
+      .from("clients")
+      .insert(clientData)
       .select("id")
       .single();
     if (error) {
@@ -110,10 +116,10 @@ export async function POST(req: NextRequest) {
         { status: 500 }
       );
     }
-    console.log("Inserted pitch deck ID:", insertedData.id);
+    console.log("Inserted client ID:", insertedData.id);
     return NextResponse.json({ success: true, id: insertedData.id });
   } catch (error) {
-    console.error("PitchDecks POST error:", error);
+    console.error("Clients POST error:", error);
     return NextResponse.json({ error: "Server error" }, { status: 500 });
   }
 }
@@ -121,12 +127,12 @@ export async function POST(req: NextRequest) {
 export async function PUT(req: NextRequest) {
   try {
     const { userId } = await auth();
-    console.log("PitchDecks PUT User ID:", userId);
+    console.log("Clients PUT User ID:", userId);
     if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
     const { id, encrypted_data, salt, iv, userKey } = await req.json();
-    if (!id || !encrypted_data || !salt || !iv || !userKey) {
+    if (!id || !encrypted_data || !iv || !userKey) {
       console.log("PUT missing fields:", {
         id,
         encrypted_data,
@@ -155,13 +161,13 @@ export async function PUT(req: NextRequest) {
     }
     const updates = {
       encrypted_data,
-      salt,
+      salt: salt || "", // Support legacy data
       iv,
       updated_at: new Date().toISOString(),
     };
-    console.log("Updating pitch deck:", { id, user_id: userId });
+    console.log("Updating client:", { id, user_id: userId });
     const { error } = await supabase
-      .from("pitch_decks")
+      .from("clients")
       .update(updates)
       .eq("id", id)
       .eq("user_id", userId);
@@ -172,10 +178,10 @@ export async function PUT(req: NextRequest) {
         { status: 500 }
       );
     }
-    console.log("Updated pitch deck ID:", id);
+    console.log("Updated client ID:", id);
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error("PitchDecks PUT error:", error);
+    console.error("Clients PUT error:", error);
     return NextResponse.json({ error: "Server error" }, { status: 500 });
   }
 }
@@ -183,19 +189,38 @@ export async function PUT(req: NextRequest) {
 export async function DELETE(req: NextRequest) {
   try {
     const { userId } = await auth();
-    console.log("PitchDecks DELETE User ID:", userId);
+    console.log("Clients DELETE User ID:", userId);
     if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-    const { id } = await req.json();
-    if (!id) {
-      console.log("DELETE missing ID");
-      return NextResponse.json({ error: "ID required" }, { status: 400 });
+    const { id, userKey } = await req.json();
+    if (!id || !userKey) {
+      console.log("DELETE missing fields:", { id, userKey });
+      return NextResponse.json(
+        { error: "ID and userKey required" },
+        { status: 400 }
+      );
     }
     const supabase = await getSupabaseClient(req);
-    console.log("Deleting pitch deck:", { id, user_id: userId });
+    const { data: userKeyData, error: userKeyError } = await supabase
+      .from("user_keys")
+      .select("key_hash")
+      .eq("user_id", userId)
+      .single();
+    if (userKeyError || !userKeyData) {
+      console.error("User key query error:", userKeyError);
+      return NextResponse.json(
+        { error: "User key not found" },
+        { status: 400 }
+      );
+    }
+    if (!(await bcrypt.compare(userKey, userKeyData.key_hash))) {
+      console.log("Invalid user key for user:", userId);
+      return NextResponse.json({ error: "Invalid user key" }, { status: 400 });
+    }
+    console.log("Deleting client:", { id, user_id: userId });
     const { error } = await supabase
-      .from("pitch_decks")
+      .from("clients")
       .delete()
       .eq("id", id)
       .eq("user_id", userId);
@@ -206,10 +231,10 @@ export async function DELETE(req: NextRequest) {
         { status: 500 }
       );
     }
-    console.log("Deleted pitch deck ID:", id);
+    console.log("Deleted client ID:", id);
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error("PitchDecks DELETE error:", error);
+    console.error("Clients DELETE error:", error);
     return NextResponse.json({ error: "Server error" }, { status: 500 });
   }
 }

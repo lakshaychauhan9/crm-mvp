@@ -1,70 +1,45 @@
-import { SignOutButton } from "@clerk/nextjs";
-import Link from "next/link";
-// import { useRouter } from "next/navigation";
+"use client";
 
-const Sidebar: React.FC = () => {
-  //   const router = useRouter();
+import Link from "next/link";
+import { SignOutButton } from "@clerk/nextjs";
+import { useDataStore } from "@/lib/store";
+
+export default function Sidebar() {
+  const { hasDataFetched } = useDataStore();
+
+  const routes = [
+    { href: "/dashboard", label: "Home" },
+    { href: "/clients", label: "Clients" },
+    { href: "/pitch-decks", label: "Pitch Decks" },
+    { href: "/strategies", label: "Strategies" },
+    { href: "/journal", label: "Journal" },
+    { href: "/analytics", label: "Analytics" },
+  ];
 
   return (
-    <aside className="w-64 bg-secondary text-secondary-foreground p-4">
+    <aside className="w-64 bg-white/90 p-4">
       <h2 className="text-xl font-bold mb-4">Client Tracker</h2>
       <nav className="space-y-2">
-        <Link
-          href="/"
-          className="block hover:bg-accent hover:text-accent-foreground p-2 rounded"
-        >
-          Home
-        </Link>
-        <Link
-          href="/dashboard"
-          className="block hover:bg-accent hover:text-accent-foreground p-2 rounded"
-        >
-          Dashboard
-        </Link>
-        <Link
-          href="/dashboard/pitch-decks"
-          className="block hover:bg-accent hover:text-accent-foreground p-2 rounded"
-        >
-          Pitch Decks
-        </Link>
-        <Link
-          href="/dashboard/strategies"
-          className="block hover:bg-accent hover:text-accent-foreground p-2 rounded"
-        >
-          Strategies
-        </Link>
-        <Link
-          href="/dashboard/journal"
-          className="block hover:bg-accent hover:text-accent-foreground p-2 rounded"
-        >
-          Journal
-        </Link>
-        <Link
-          href="/dashboard/badges"
-          className="block hover:bg-accent hover:text-accent-foreground p-2 rounded"
-        >
-          Badges
-        </Link>
-        <Link
-          href="/dashboard/feedback"
-          className="block hover:bg-accent hover:text-accent-foreground p-2 rounded"
-        >
-          Feedback
-        </Link>
-        <Link
-          href="/dashboard/settings"
-          className="block hover:bg-accent hover:text-accent-foreground p-2 rounded"
-        >
-          Settings
-        </Link>
+        {routes.map((route) => (
+          <Link
+            key={route.href}
+            href={route.href}
+            className={`block p-2 rounded hover:bg-gray-200 ${
+              !hasDataFetched && route.href !== "/dashboard"
+                ? "opacity-50 cursor-not-allowed"
+                : ""
+            }`}
+          >
+            {route.label}{" "}
+            {!hasDataFetched && route.href !== "/dashboard" && <span>🔒</span>}
+          </Link>
+        ))}
         <SignOutButton>
-          <button className="w-full text-left hover:bg-accent hover:text-accent-foreground p-2 rounded">
+          <button className="w-full text-left p-2 rounded hover:bg-gray-200">
             Sign Out
           </button>
         </SignOutButton>
       </nav>
     </aside>
   );
-};
-
-export default Sidebar;
+}

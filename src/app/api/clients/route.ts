@@ -1,3 +1,9 @@
+/**
+ * API route for clients in Client Tracker (Server Component).
+ * Handles GET, POST, PUT, DELETE requests for client CRUD operations.
+ * Why: Manages encrypted client data with AES-256-CBC.
+ * How: Uses Clerk for auth, Supabase for storage, bcrypt for userKey validation.
+ */
 import { getSupabaseClient } from "@/lib/supabase";
 import { NextResponse, NextRequest } from "next/server";
 import { auth } from "@clerk/nextjs/server";
@@ -23,8 +29,20 @@ export async function GET(req: NextRequest) {
         { status: 500 }
       );
     }
-    console.log("Fetched clients:", data.length);
-    return NextResponse.json({ data });
+    // Validate data
+    const validData = data.filter((client) => {
+      if (!client.encrypted_data || !client.iv || !client.salt) {
+        console.error("Invalid client data:", client.id, {
+          hasEncryptedData: !!client.encrypted_data,
+          hasIv: !!client.iv,
+          hasSalt: !!client.salt,
+        });
+        return false;
+      }
+      return true;
+    });
+    console.log("Fetched clients:", validData.length);
+    return NextResponse.json({ data: validData });
   } catch (error) {
     console.error("Clients GET error:", error);
     return NextResponse.json({ error: "Server error" }, { status: 500 });

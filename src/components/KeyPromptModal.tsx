@@ -1,97 +1,105 @@
-import { useState, useEffect } from "react";
-import { useUser } from "@clerk/nextjs";
-import { Button } from "@/components/ui/button";
+/**
+ * KeyPromptModal component for Client Tracker (Client Component).
+ * Prompts user for encryption key on app load.
+ * Why: Ensures userKey is set for encryption/decryption.
+ * How: Uses Zustand for state, Shadcn for UI.
+ * Changes:
+ * - Added validation to prevent empty key.
+ * - Improved logging to debug double prompts.
+ * - Ensured single submission.
+ */
+"use client";
+
+import { useState } from "react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
+import { Loader2 } from "lucide-react";
+import { useUIStore } from "@/lib/store";
 
-interface KeyPromptModalProps {
-  onKeySet: (key: string) => void;
-}
-
-const KeyPromptModal: React.FC<KeyPromptModalProps> = ({ onKeySet }) => {
-  const { user, isSignedIn } = useUser();
-  const [encryptionKey, setEncryptionKey] = useState("");
-  const [error, setError] = useState<string | null>(null);
+export default function KeyPromptModal() {
+  const { userKey, setUserKey, setError } = useUIStore();
+  const [key, setKey] = useState("");
   const [loading, setLoading] = useState(false);
-  const [keyExists, setKeyExists] = useState(false);
+  const [localError, setLocalError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (!isSignedIn || !user) return;
-    const checkKey = async () => {
-      setLoading(true);
-      try {
-        const res = await fetch("/api/user-keys", {
-          method: "GET",
-          headers: { "Content-Type": "application/json" },
-        });
-        const { keyExists } = await res.json();
-        setKeyExists(keyExists);
-      } catch (err) {
-        setError(`Failed to check key status : ${err}`);
-      } finally {
-        setLoading(false);
-      }
-    };
-    checkKey();
-  }, [isSignedIn, user]);
+  console.log("KeyPromptModal rendering:", {
+    hasUserKey: !!userKey,
+    keyLength: key.length,
+    loading,
+    localError,
+  });
 
-  const handleSubmit = async () => {
-    if (!encryptionKey) {
-      setError("Please enter an encryption key");
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!key.trim()) {
+      setLocalError("Encryption key is required");
       return;
     }
     setLoading(true);
-    setError(null);
+    setLocalError(null);
     try {
-      const res = await fetch("/api/user-keys", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userKey: encryptionKey, verifyOnly: keyExists }),
-      });
-      const result = await res.json();
-      if (!res.ok) throw new Error(result.error || "Failed to process key");
-      if (result.success && result.keyValid) {
-        onKeySet(encryptionKey);
-      }
+      console.log("KeyPromptModal: Submitting key:", key.slice(0, 4) + "...");
+      setUserKey(key);
     } catch (err) {
-      setError((err as Error).message);
+      const errMsg = (err as Error).message || "Failed to set key";
+      setLocalError(errMsg);
+      setError(errMsg);
+      console.error("KeyPromptModal error:", err);
     } finally {
       setLoading(false);
     }
   };
 
-  if (!isSignedIn) return null;
+  if (userKey) {
+    console.log("KeyPromptModal: Hidden (userKey set)");
+    return null;
+  }
 
   return (
-    <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50">
-      <Card className="w-96">
-        <CardHeader>
-          <CardTitle className="text-2xl">
-            {keyExists ? "Enter Encryption Key" : "Set Encryption Key"}
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
+    <Dialog open={true} onOpenChange={() => {}}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Enter Encryption Key</DialogTitle>
+          <DialogDescription>
+            Provide your encryption key to access your data securely.
+          </DialogDescription>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <Label htmlFor="key">Encryption Key</Label>
             <Input
+              id="key"
               type="password"
-              placeholder="Enter your encryption key"
-              value={encryptionKey}
-              onChange={(e) => setEncryptionKey(e.target.value)}
-              className="border-input focus:ring-2"
-            />
-            <Button
-              onClick={handleSubmit}
+              value={key}
+              onChange={(e) => setKey(e.target.value)}
               disabled={loading}
-              className="bg-primary text-primary-foreground hover:bg-primary/90"
-            >
-              {loading ? "Processing..." : keyExists ? "Verify Key" : "Set Key"}
-            </Button>
-            {error && <p className="text-destructive">{error}</p>}
+              required
+            />
           </div>
-        </CardContent>
-      </Card>
-    </div>
+          {localError && <p className="text-red-500">{localError}</p>}
+          <DialogFooter>
+            <Button type="submit" disabled={loading}>
+              {loading ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  Submitting...
+                </>
+              ) : (
+                "Submit"
+              )}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
-};
-
-export default KeyPromptModal;
+}

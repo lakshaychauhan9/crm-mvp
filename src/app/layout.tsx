@@ -1,13 +1,20 @@
+/**
+ * Root layout for Client Tracker (Server Component).
+ * Wraps app with ClerkProvider for authentication and global styles.
+ * Why: Ensures auth context, sets up public routes, and applies base layout.
+ * How: Uses ClerkProvider, sets metadata, and renders children.
+ * Note: ClientRoot handles dashboard-specific logic.
+ */
 import "./globals.css";
-import { Inter } from "next/font/google";
 import { ClerkProvider } from "@clerk/nextjs";
-import { KeyProvider } from "@/components/KeyContext";
+import { Inter } from "next/font/google";
+import AnimatedWrapper from "./AnimatedWrapper";
 
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata = {
   title: "Client Tracker",
-  description: "Secure CRM for small businesses and freelancers",
+  description: "Secure CRM for freelancers",
 };
 
 export default function RootLayout({
@@ -16,10 +23,15 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <ClerkProvider>
+    <ClerkProvider
+      publishableKey={process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY}
+      signInUrl="/sign-in"
+      signUpUrl="/sign-up"
+      afterSignOutUrl="/"
+    >
       <html lang="en">
-        <body className={inter.className}>
-          <KeyProvider>{children}</KeyProvider>
+        <body className={`${inter.className} min-h-screen bg-background`}>
+          <AnimatedWrapper>{children}</AnimatedWrapper>{" "}
         </body>
       </html>
     </ClerkProvider>

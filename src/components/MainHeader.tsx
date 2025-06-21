@@ -1,4 +1,6 @@
+"use client";
 import { useUser } from "@clerk/nextjs";
+import CustomSignOutButton from "@/components/SignOutButton";
 
 const Header: React.FC = () => {
   const { user } = useUser();
@@ -8,6 +10,7 @@ const Header: React.FC = () => {
       {user && (
         <span className="text-sm">
           Welcome, {user.firstName || user.username || "User"}
+          <CustomSignOutButton />;
         </span>
       )}
     </header>

@@ -1,76 +1,49 @@
-import { useState } from "react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { useKey } from "@/components/KeyContext";
+/**
+ * LockedContent component for Client Tracker (Client Component).
+ * Conditionally renders children based on userKey and route.
+ * Why: Simplifies content locking logic, deferring key input to KeyPromptModal.
+ * How: Uses Zustand to check userKey, renders children if unlocked or for non-protected routes.
+ * Changes:
+ * - Removed fixed header bar (handled by KeyPromptModal).
+ * - Simplified to pass through children if userKey exists or route is non-protected.
+ * - Added route-based logic to allow non-protected routes (e.g., /dashboard/settings).
+ */
+"use client";
 
-interface LockedContentProps {
+import { usePathname } from "next/navigation";
+import { useUIStore } from "@/lib/store";
+
+export default function LockedContent({
+  children,
+}: {
   children: React.ReactNode;
-}
+}) {
+  const { userKey } = useUIStore();
+  const pathname = usePathname();
 
-const LockedContent: React.FC<LockedContentProps> = ({ children }) => {
-  const { userKey, setUserKey } = useKey();
-  const [keyInput, setKeyInput] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
+  // Non-protected routes that don't require userKey
+  const nonProtectedRoutes = [
+    "/dashboard/settings",
+    "/dashboard/feedback",
+    "/dashboard/badges",
+    "/dashboard/journal",
+  ];
 
-  const handleUnlock = async () => {
-    if (!keyInput) {
-      setError("Please enter an encryption key");
-      return;
-    }
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await fetch("/api/user-keys", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userKey: keyInput, verifyOnly: true }),
-      });
-      const result = await res.json();
-      if (!res.ok) throw new Error(result.error || "Failed to verify key");
-      if (result.success && result.keyValid) {
-        setUserKey(keyInput);
-      }
-    } catch (err) {
-      setError((err as Error).message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  if (userKey) return <>{children}</>;
-
-  return (
-    <div className="relative">
-      <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center z-10">
-        <Card className="w-96">
-          <CardHeader>
-            <CardTitle>Unlock Content</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              <Input
-                type="password"
-                placeholder="Enter encryption key"
-                value={keyInput}
-                onChange={(e) => setKeyInput(e.target.value)}
-              />
-              <Button
-                onClick={handleUnlock}
-                disabled={loading}
-                className="w-full bg-primary text-primary-foreground hover:bg-primary/90"
-              >
-                {loading ? "Verifying..." : "Unlock"}
-              </Button>
-              {error && <p className="text-destructive">{error}</p>}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-      <div className="pointer-events-none opacity-50">{children}</div>
-    </div>
+  const isNonProtected = nonProtectedRoutes.some((route) =>
+    pathname.startsWith(route)
   );
-};
 
-export default LockedContent;
+  console.log("LockedContent:", {
+    pathname,
+    hasUserKey: !!userKey,
+    isNonProtected,
+  });
+
+  // Render children if userKey exists or route is non-protected
+  if (userKey || isNonProtected) {
+    return <div className="w-full">{children}</div>;
+  }
+
+  // Return null to defer rendering to KeyPromptModal
+  return null;
+}

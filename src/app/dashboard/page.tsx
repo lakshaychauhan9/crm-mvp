@@ -1,191 +1,114 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import { useUser } from "@clerk/nextjs";
-import { decrypt } from "@/lib/crypto";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Loader2, Trash2, Edit2 } from "lucide-react";
-import Header from "@/components/MainHeader";
-import Sidebar from "@/components/Sidebar";
-import LockedContent from "@/components/LockedContent";
-import ClientModal from "@/components/ClientModal";
-import { useKey } from "@/components/KeyContext";
-import { Client } from "@/lib/types";
+// Dashboard page displaying user information and encryption key management.
+// Fetches user data from Supabase, renders blocks for greeting, user info, key form, and sign-out.
+import { SignOutButton } from "@/components/sign-out-button";
+import { KeyForm } from "@/components/KeyForm";
+import { useUser, useSession } from "@clerk/nextjs";
+import { useEffect, useState, useCallback } from "react";
+import { getSupabaseBrowserClient } from "@/lib/supabase-client";
 
 export default function Dashboard() {
-  const { isSignedIn } = useUser();
-  const { userKey } = useKey();
-  const [clients, setClients] = useState<Client[]>([]);
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editClient, setEditClient] = useState<Client | null>(null);
-  const [loading, setLoading] = useState(false);
+  const { user, isLoaded } = useUser();
+  const { session } = useSession();
+  const [userData, setUserData] = useState<{
+    username?: string;
+    email?: string;
+    encryption_key_salt?: string;
+  } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [isLoadingData, setIsLoadingData] = useState(true);
 
-  const fetchClients = useCallback(async () => {
-    if (!userKey) return;
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await fetch("/api/clients", {
-        headers: { "Content-Type": "application/json" },
-      });
-      const { data } = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to fetch clients");
-      const decryptedClients = await Promise.all(
-        data.map(async (client: Client) => {
-          try {
-            const decrypted = await decrypt(
-              client.encrypted_data,
-              userKey,
-              client.iv
-            );
-            return { ...client, decrypted_data: JSON.parse(decrypted) };
-          } catch (err) {
-            console.error(`Decryption failed for client ${client.id}:`, err);
-            return {
-              ...client,
-              decrypted_data: { error: "Decryption failed" },
-            };
-          }
-        })
-      );
-      setClients(decryptedClients);
-    } catch (err) {
-      setError((err as Error).message);
-    } finally {
-      setLoading(false);
-    }
-  }, [userKey]);
-
-  useEffect(() => {
-    if (isSignedIn && userKey) fetchClients();
-  }, [isSignedIn, userKey, fetchClients]);
-
-  const handleEdit = useCallback((client: Client) => {
-    if (client.decrypted_data && "error" in client.decrypted_data) {
-      setError("Cannot edit: Decryption failed");
+  // Fetch user data from Supabase when user and session are available.
+  const fetchUserData = useCallback(async () => {
+    if (!isLoaded || !user?.id || !session) {
+      setIsLoadingData(false);
       return;
     }
-    setEditClient(client);
-    setIsModalOpen(true);
-  }, []);
 
-  const handleDelete = useCallback(
-    async (id: string) => {
-      setLoading(true);
-      setError(null);
-      try {
-        const res = await fetch("/api/clients", {
-          method: "DELETE",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ id }),
+    try {
+      const token = await session.getToken();
+      if (process.env.NODE_ENV === "development") {
+        console.log("Dashboard: Clerk token:", {
+          token: token ? "present" : "missing",
         });
-        const result = await res.json();
-        if (!res.ok) throw new Error(result.error || "Delete failed");
-        await fetchClients();
-      } catch (err) {
-        setError((err as Error).message);
-      } finally {
-        setLoading(false);
       }
-    },
-    [fetchClients]
-  );
+      if (!token) {
+        throw new Error("Authentication token missing");
+      }
 
-  if (!isSignedIn) return <div>Please sign in to view the dashboard</div>;
+      const supabase = getSupabaseBrowserClient(token);
+      const { data, error } = await supabase
+        .from("users")
+        .select(
+          "id, email, username, encryption_key_salt, encryption_test_iv, encrypted_test_data"
+        )
+        .eq("id", user.id)
+        .single();
+
+      if (error || !data) {
+        console.error("Dashboard: Supabase error:", error);
+        setError("Unable to load your profile. Please try again later.");
+        return;
+      }
+
+      if (process.env.NODE_ENV === "development") {
+        console.log("Dashboard: User data:", data);
+      }
+      setUserData(data);
+    } catch (err) {
+      console.error("Dashboard: Fetch error:", err);
+      setError("An error occurred while loading your profile.");
+    } finally {
+      setIsLoadingData(false);
+    }
+  }, [isLoaded, user?.id, session]);
+
+  useEffect(() => {
+    fetchUserData();
+  }, [fetchUserData]);
+
+  if (!isLoaded || isLoadingData) {
+    return <div className="p-4 text-center">Loading...</div>;
+  }
+  if (!user) {
+    return (
+      <div className="p-4 text-center">
+        Please sign in to view your dashboard.
+      </div>
+    );
+  }
 
   return (
-    <div className="flex flex-col min-h-screen">
-      <Header />
-      <div className="flex flex-1">
-        <Sidebar />
-        <main className="flex-1 p-4">
-          <LockedContent>
-            <div className="mb-6">
-              <Button
-                onClick={() => {
-                  setEditClient(null);
-                  setIsModalOpen(true);
-                }}
-                className="bg-primary text-primary-foreground hover:bg-primary/90"
-              >
-                Add Client
-              </Button>
-            </div>
-            {isModalOpen && (
-              <ClientModal
-                userKey={userKey}
-                editClient={editClient}
-                onClose={() => setIsModalOpen(false)}
-                onSubmit={() => {
-                  setIsModalOpen(false);
-                  fetchClients();
-                }}
-              />
-            )}
-            <Card>
-              <CardHeader>
-                <CardTitle>Clients</CardTitle>
-              </CardHeader>
-              <CardContent>
-                {loading && (
-                  <Loader2 className="h-6 w-6 animate-spin mx-auto" />
-                )}
-                {clients.length === 0 && !loading && <p>No clients found</p>}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {clients.map((client) => (
-                    <Card key={client.id} className="w-full max-w-sm">
-                      <CardContent className="p-4">
-                        {"error" in (client.decrypted_data || {}) ? (
-                          <span className="text-destructive">
-                            Decryption failed
-                          </span>
-                        ) : (
-                          <div className="space-y-1">
-                            <p className="font-medium">
-                              {client.decrypted_data?.first_name}{" "}
-                              {client.decrypted_data?.last_name}
-                            </p>
-                            <p className="text-sm text-muted-foreground">
-                              {client.decrypted_data?.email}
-                            </p>
-                            <p className="text-sm text-muted-foreground">
-                              Priority:{" "}
-                              {client.decrypted_data?.priority || "N/A"}
-                            </p>
-                            <p className="text-sm text-muted-foreground">
-                              Status: {client.decrypted_data?.status || "N/A"}
-                            </p>
-                            <div className="flex space-x-2 mt-2">
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => handleEdit(client)}
-                                disabled={loading}
-                              >
-                                <Edit2 className="h-4 w-4" />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => handleDelete(client.id)}
-                                disabled={loading}
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </div>
-                          </div>
-                        )}
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
-                {error && <p className="text-destructive mt-4">{error}</p>}
-              </CardContent>
-            </Card>
-          </LockedContent>
-        </main>
+    <div className="p-4 max-w-md mx-auto">
+      {/* Greeting Block */}
+      <div className="mb-4 p-4 bg-blue-100 rounded">
+        <h1 className="text-2xl font-bold">
+          Welcome, {userData?.username || user.firstName || "User"}!
+        </h1>
+      </div>
+
+      {/* User Info Block */}
+      <div className="mb-4 p-4 bg-gray-100 rounded">
+        <p className="mb-2">
+          Email: {userData?.email || user.primaryEmailAddress?.emailAddress}
+        </p>
+        <p>
+          Encryption Key: {userData?.encryption_key_salt ? "Set" : "Not set"}
+        </p>
+      </div>
+
+      {/* Error Block */}
+      {error && (
+        <div className="mb-4 p-4 bg-red-100 text-red-700 rounded">{error}</div>
+      )}
+
+      {/* Key Setup/Validation Block */}
+      <KeyForm userId={user.id} hasKey={!!userData?.encryption_key_salt} />
+
+      {/* Sign Out Block */}
+      <div className="mt-4">
+        <SignOutButton />
       </div>
     </div>
   );

@@ -26,7 +26,7 @@ export default function DashboardLayout({
       </SignedOut>
       <SignedIn>
         <div className="flex w-full max-w-5xl items-center justify-center  ">
-          <Sidebar /> {/* Whitish background with slight transparency */}
+          <Sidebar />
           <main className="flex-1 p-4">{children}</main>
         </div>
       </SignedIn>

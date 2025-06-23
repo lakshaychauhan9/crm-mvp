@@ -1,11 +1,11 @@
 // src/app/api/users/route.ts
-// Basic user API to debug auth issues.
+// API route to fetch user data from Supabase.
+// Secured with Clerk authentication and Supabase RLS.
 import { NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
-import type { NextRequest } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 
-export async function GET(_req: NextRequest) {
+export async function GET() {
   try {
     const { userId } = await auth();
     console.log("Users GET User ID:", userId);
